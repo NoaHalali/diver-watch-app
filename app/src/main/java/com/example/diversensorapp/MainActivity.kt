@@ -1,7 +1,9 @@
 package com.example.diversensorapp
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -9,39 +11,60 @@ import android.hardware.SensorManager
 import android.os.Bundle
 import android.util.Log
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.app.ActivityCompat
-import android.Manifest
+import androidx.core.content.ContextCompat
 
 class MainActivity : Activity(), SensorEventListener {
-
     private lateinit var sensorManager: SensorManager
     private var heartRateSensor: Sensor? = null
     private lateinit var textView: TextView
+
+    private val PERMISSION_REQUEST_BODY_SENSORS = 100
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         textView = TextView(this).apply {
             text = "Waiting for heart rate..."
-            textSize = 18f
+            textSize = 20f
         }
         setContentView(textView)
-
-        ActivityCompat.requestPermissions(this,
-            arrayOf(Manifest.permission.BODY_SENSORS), 1)
 
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         heartRateSensor = sensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE)
 
         if (heartRateSensor == null) {
             textView.text = "Heart rate sensor not available."
+            Log.e("MainActivity", "Heart rate sensor not available")
+        }
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BODY_SENSORS)
+            != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.BODY_SENSORS),
+                PERMISSION_REQUEST_BODY_SENSORS
+            )
+        } else {
+            registerHeartRateListener()
+        }
+    }
+
+    private fun registerHeartRateListener() {
+        heartRateSensor?.also { sensor ->
+            sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+            Log.d("MainActivity", "Heart rate sensor registered")
+        } ?: run {
+            textView.text = "Heart rate sensor unavailable."
         }
     }
 
     override fun onResume() {
         super.onResume()
-        heartRateSensor?.also { sensor ->
-            sensorManager.registerListener(this, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BODY_SENSORS)
+            == PackageManager.PERMISSION_GRANTED) {
+            registerHeartRateListener()
         }
     }
 
@@ -59,4 +82,17 @@ class MainActivity : Activity(), SensorEventListener {
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == PERMISSION_REQUEST_BODY_SENSORS) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                registerHeartRateListener()
+            } else {
+                Toast.makeText(this, "BODY_SENSORS permission denied", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 }
